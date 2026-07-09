@@ -1,0 +1,997 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Brittco Pay Helper</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<style>
+:root{--bg:#f4f6fa;--card:#fff;--ink:#1a2333;--mut:#64748b;--line:#e2e8f0;--acc:#2563eb;--acc2:#1d4ed8;--ok:#16a34a;--warn:#d97706;--bad:#dc2626;}
+*{box-sizing:border-box}
+body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--ink);font-size:15px;line-height:1.45}
+header{background:var(--card);border-bottom:1px solid var(--line);padding:14px 22px;display:flex;align-items:center;gap:18px;position:sticky;top:0;z-index:5}
+header h1{font-size:18px;margin:0;letter-spacing:.2px}
+nav{display:flex;gap:6px;margin-left:auto}
+nav button{background:none;border:none;padding:8px 14px;border-radius:8px;font-size:14px;cursor:pointer;color:var(--mut);font-weight:600}
+nav button.on{background:#e8efff;color:var(--acc)}
+main{max-width:1060px;margin:0 auto;padding:22px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin-bottom:18px}
+.card h2{margin:0 0 12px;font-size:16px}
+.card h3{margin:16px 0 8px;font-size:14px;color:var(--mut);text-transform:uppercase;letter-spacing:.4px}
+button.btn{background:var(--acc);color:#fff;border:none;border-radius:8px;padding:9px 16px;font-size:14px;font-weight:600;cursor:pointer}
+button.btn:hover{background:var(--acc2)}
+button.btn.sec{background:#eef2f7;color:var(--ink)}
+button.btn.danger{background:#fee2e2;color:var(--bad)}
+button.btn:disabled{opacity:.45;cursor:not-allowed}
+input,select,textarea{font:inherit;padding:7px 9px;border:1px solid var(--line);border-radius:7px;background:#fff;color:var(--ink)}
+input:focus,select:focus,textarea:focus{outline:2px solid #bfdbfe}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th{text-align:left;color:var(--mut);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.3px;padding:6px 8px;border-bottom:2px solid var(--line)}
+td{padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:middle}
+tr.excluded td{opacity:.45}
+.chip{display:inline-block;padding:2px 10px;border-radius:999px;font-size:12px;font-weight:700}
+.chip.completed{background:#dcfce7;color:#15803d}
+.chip.missed{background:#fee2e2;color:var(--bad)}
+.chip.incomplete,.chip.scheduled,.chip.unknown{background:#fef3c7;color:#92400e}
+.chip.manual{background:#e0e7ff;color:#3730a3}
+.chip.draft{background:#e2e8f0;color:#475569}
+.chip.confirmed{background:#dbeafe;color:#1d4ed8}
+.chip.paid{background:#dcfce7;color:#15803d}
+.warnbox{background:#fffbeb;border:1px solid #fde68a;border-radius:9px;padding:10px 14px;margin:10px 0;color:#92400e;font-size:14px}
+.errbox{background:#fef2f2;border:1px solid #fecaca;border-radius:9px;padding:10px 14px;margin:10px 0;color:var(--bad);font-size:14px}
+.okbox{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:9px;padding:10px 14px;margin:10px 0;color:#15803d;font-size:14px}
+.grid{display:grid;gap:14px}
+.grid.c2{grid-template-columns:1fr 1fr}
+.grid.c4{grid-template-columns:repeat(4,1fr)}
+.kv{background:#f8fafc;border:1px solid var(--line);border-radius:9px;padding:10px 12px}
+.kv .k{font-size:12px;color:var(--mut);text-transform:uppercase;letter-spacing:.3px}
+.kv .v{font-size:17px;font-weight:700;margin-top:2px}
+.drop{border:2px dashed #c7d2e2;border-radius:12px;padding:26px;text-align:center;color:var(--mut);cursor:pointer;transition:.15s}
+.drop.over{border-color:var(--acc);background:#eff6ff}
+textarea.out{width:100%;min-height:270px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;white-space:pre}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.mut{color:var(--mut);font-size:13px}
+.money{font-variant-numeric:tabular-nums;font-weight:600}
+.tot{font-size:20px;font-weight:800}
+label.f{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--mut);font-weight:600}
+.pcard{display:flex;align-items:center;gap:14px;padding:14px 18px;background:var(--card);border:1px solid var(--line);border-radius:12px;margin-bottom:10px;cursor:pointer}
+.pcard:hover{border-color:#bfdbfe}
+.time-in{width:96px}
+footer{color:var(--mut);text-align:center;font-size:12px;padding:20px}
+@media(max-width:760px){.grid.c2,.grid.c4{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+  <h1>&#128181; Brittco Pay Helper</h1>
+  <nav>
+    <button data-v="home" class="on">Pay Periods</button>
+    <button data-v="settings">Settings</button>
+    <button data-v="backup">Backup / Restore</button>
+  </nav>
+</header>
+<main id="main"></main>
+<footer>Local &amp; offline — your data lives only in this browser. Back up regularly.</footer>
+
+<script>
+/* Brittco Pay Helper — core logic (parser, merger, pay engine, formatters)
+   Pure functions, no DOM. Works in Node (module.exports) and browser (window.BPH). */
+(function (root, factory) {
+  if (typeof module === 'object' && module.exports) module.exports = factory();
+  else root.BPH = factory();
+})(typeof self !== 'undefined' ? self : this, function () {
+  'use strict';
+
+  var DAY_START = 7 * 60;    // 7:00 AM
+  var NIGHT_START = 23 * 60; // 11:00 PM
+  var MIN_DAY = 1440;
+
+  // ---------- status glyph map (FontAwesome codepoints in Brittco print PDFs) ----------
+  var STATUS_CP = { 0xF058: 'completed', 0x2713: 'completed', 0xF057: 'missed', 0xF017: 'scheduled', 0x26A0: 'incomplete' };
+  var IGNORE_CP = { 0x23FE: 1, 0xF073: 1, 0x2190: 1, 0x2192: 1, 0xF186: 1 };
+
+  function stripped(t) { return t.replace(/\s+/g, ''); }
+
+  // ---------- 1. fragments: rebuild words/lines from pdf.js char-level items ----------
+  function buildFragments(items) {
+    var frags = [], glyphs = [], cur = null;
+    for (var i = 0; i < items.length; i++) {
+      var it = items[i];
+      var s = it.str;
+      if (!s || !s.trim()) { continue; }
+      var x = it.transform[4], y = it.transform[5], h = it.height || 0, w = it.width || 0;
+      // status / decoration glyphs
+      var cp = s.trim().length === 1 ? s.trim().codePointAt(0) : 0;
+      if (cp && STATUS_CP[cp]) { glyphs.push({ x: x, y: y, status: STATUS_CP[cp] }); continue; }
+      if (cp && (IGNORE_CP[cp] || (cp >= 0xE000 && cp <= 0xF8FF))) { continue; }
+      if (cur && Math.abs(y - cur.y) <= 2 && (x - cur.xEnd) <= 10 && (x - cur.xEnd) >= -2) {
+        cur.text += (x - cur.xEnd > 3 ? ' ' : '') + s;
+        cur.xEnd = x + w;
+      } else {
+        if (cur) frags.push(cur);
+        cur = { text: s, x: x, y: y, h: h, xEnd: x + w };
+      }
+    }
+    if (cur) frags.push(cur);
+    return { frags: frags, glyphs: glyphs };
+  }
+
+  // ---------- 2. day columns from header dates ----------
+  function findColumns(frags) {
+    var cands = [];
+    for (var i = 0; i < frags.length; i++) {
+      var t = stripped(frags[i].text);
+      if (/^\d{1,2}\/\d{1,2}$/.test(t)) cands.push({ md: t, x: frags[i].x, y: frags[i].y });
+    }
+    // group by y, take largest group (the 7 header dates)
+    var groups = [];
+    cands.forEach(function (c) {
+      var g = groups.find(function (g) { return Math.abs(g.y - c.y) <= 3; });
+      if (g) g.items.push(c); else groups.push({ y: c.y, items: [c] });
+    });
+    groups.sort(function (a, b) { return b.items.length - a.items.length; });
+    if (!groups.length || groups[0].items.length < 2) return null;
+    return groups[0].items.sort(function (a, b) { return a.x - b.x; })
+      .map(function (c) { return { md: c.md, x: c.x }; });
+  }
+
+  function nearestColumn(columns, x) {
+    var best = null, bd = 1e9;
+    for (var i = 0; i < columns.length; i++) {
+      var d = Math.abs(columns[i].x - x);
+      if (d < bd) { bd = d; best = columns[i]; }
+    }
+    return best;
+  }
+
+  // ---------- 3. parse one PDF (array of pages, each = pdf.js textContent items) ----------
+  // opts: { year: 2026 }  (year hint for header dates like "6/14")
+  function parseDocument(pages, opts) {
+    opts = opts || {};
+    var columns = null;
+    var cards = [], incomplete = [];
+    var currentClient = null;
+    var openCard = null, lastTimeCard = null;
+    var allGlyphs = [];
+    var legendYs = [];
+
+    function closeCard() {
+      if (!openCard) return;
+      cards.push(openCard);
+      if (openCard.times.length < 2) incomplete.push(openCard);
+      openCard = null;
+    }
+
+    for (var p = 0; p < pages.length; p++) {
+      var bf = buildFragments(pages[p]);
+      var frags = bf.frags;
+      bf.glyphs.forEach(function (g) { g.page = p; allGlyphs.push(g); });
+      if (!columns) columns = findColumns(frags);
+
+      for (var i = 0; i < frags.length; i++) {
+        var f = frags[i];
+        var t = f.text.trim();
+        var st = stripped(t);
+
+        if (/^Scheduled/i.test(st)) legendYs.push({ page: p, y: f.y });
+
+        // client section header (large font)
+        if (f.h >= 14 && !/^Attendance/i.test(st)) {
+          closeCard();
+          currentClient = t;
+          continue;
+        }
+        if (f.h >= 14) continue;
+
+        if (/^\d+Clients?$/i.test(st)) {
+          closeCard();
+          openCard = { client: currentClient, x: f.x, topY: f.y, page: p, clientInitials: null, staff: [], times: [], cross: false, mode: 'client', status: null };
+          continue;
+        }
+        if (/^\d+Staff$/i.test(st)) { if (openCard) openCard.mode = 'staff'; continue; }
+
+        // times (may appear as "7:00am-" / "11:00pm" on separate fragments)
+        var tm, times = [], re = /(\d{1,2}):(\d{2})\s*(am|pm)/gi;
+        while ((tm = re.exec(t)) !== null) {
+          var hh = parseInt(tm[1], 10) % 12, mm = parseInt(tm[2], 10);
+          if (/pm/i.test(tm[3])) hh += 12;
+          times.push(hh * 60 + mm);
+        }
+        if (times.length) {
+          var target = null;
+          if (openCard && openCard.times.length < 2 && (!columns || sameCol(columns, openCard.x, f.x))) target = openCard;
+          else {
+            closeCard();
+            for (var k = 0; k < incomplete.length; k++) {
+              if (incomplete[k].times.length < 2 && (!columns || sameCol(columns, incomplete[k].x, f.x))) { target = incomplete[k]; break; }
+            }
+          }
+          if (target) {
+            for (var q = 0; q < times.length && target.times.length < 2; q++) target.times.push(times[q]);
+            lastTimeCard = target;
+          }
+          continue;
+        }
+
+        if (/^Crosses/i.test(st)) {
+          var tc = (openCard && openCard.times.length) ? openCard : lastTimeCard;
+          if (tc) tc.cross = true;
+          continue;
+        }
+        if (/^Midnight$/i.test(st)) continue;
+
+        // small font = initials line
+        if (f.h > 0 && f.h < 9 && openCard) {
+          var toks = t.split(/\s+/).filter(function (s) { return /^[A-Z]{1,3}$/.test(s); });
+          if (!toks.length) continue;
+          if (openCard.mode === 'staff') openCard.staff = openCard.staff.concat(toks);
+          else if (!openCard.clientInitials) openCard.clientInitials = toks[0];
+          continue;
+        }
+        // everything else: page furniture — ignore
+      }
+      closeCard();
+    }
+
+    // status glyphs -> cards (geometric match: icon sits top-right inside the card)
+    var usable = allGlyphs.filter(function (g) {
+      return !legendYs.some(function (l) { return l.page === g.page && Math.abs(l.y - g.y) <= 5; });
+    });
+    cards.forEach(function (c) {
+      var best = null, bd = 1e9;
+      usable.forEach(function (g) {
+        if (g.page !== c.page) return;
+        var dx = g.x - c.x, dy = g.y - c.topY;
+        if (dx < -5 || dx > 100 || dy < -6 || dy > 30) return;
+        var d = Math.abs(dx - 62) + Math.abs(dy - 12);
+        if (d < bd) { bd = d; best = g; }
+      });
+      if (best) c.status = best.status;
+    });
+
+    // cards -> shifts
+    var year = opts.year || (new Date()).getFullYear();
+    var shifts = [];
+    cards.forEach(function (c) {
+      if (c.times.length < 2 || !columns) return;
+      var col = nearestColumn(columns, c.x);
+      if (!col) return;
+      var md = col.md.split('/');
+      var date = mkDate(year, parseInt(md[0], 10), parseInt(md[1], 10), opts.periodStart);
+      var start = c.times[0], end = c.times[1];
+      if (c.cross || end <= start) end += MIN_DAY;
+      shifts.push({
+        client: c.client || '', clientInitials: c.clientInitials || '',
+        date: date, startMin: start, endMin: end,
+        staff: c.staff, status: c.status || 'unknown', cross: c.cross
+      });
+    });
+    return { shifts: shifts, columns: columns };
+  }
+
+  function sameCol(columns, x1, x2) {
+    var c1 = nearestColumn(columns, x1), c2 = nearestColumn(columns, x2);
+    return c1 && c2 && c1.md === c2.md;
+  }
+
+  // year handling: pick the year that puts the date nearest the pay-period start (handles Dec/Jan)
+  function mkDate(year, m, d, periodStartISO) {
+    if (!periodStartISO) return iso(year, m, d);
+    var py = parseInt(periodStartISO.slice(0, 4), 10);
+    var best = null, bd = 1e9;
+    [py - 1, py, py + 1].forEach(function (y) {
+      var diff = Math.abs(ord(iso(y, m, d)) - ord(periodStartISO));
+      if (diff < bd) { bd = diff; best = y; }
+    });
+    return iso(best, m, d);
+  }
+  function iso(y, m, d) { return y + '-' + pad(m) + '-' + pad(d); }
+  function pad(n) { return (n < 10 ? '0' : '') + n; }
+  function ord(isoDate) { return Math.round(Date.UTC(+isoDate.slice(0, 4), +isoDate.slice(5, 7) - 1, +isoDate.slice(8, 10)) / 86400000); }
+  function fromOrd(o) { var d = new Date(o * 86400000); return iso(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate()); }
+  function weekday(isoDate) { return new Date(isoDate + 'T00:00:00Z').getUTCDay(); } // 0=Sun
+
+  // ---------- 4. filter & dedupe ----------
+  function myShifts(shifts, myInitials) {
+    return shifts.filter(function (s) { return s.staff.indexOf(myInitials) !== -1; });
+  }
+  function dedupe(shifts) {
+    var seen = {}, out = [];
+    shifts.forEach(function (s) {
+      var k = [s.client, s.clientInitials, s.date, s.startMin, s.endMin].join('|');
+      if (!seen[k]) { seen[k] = 1; out.push(s); }
+    });
+    return out;
+  }
+  function inPullWindow(s, periodStart, periodEnd) {
+    var o = ord(s.date);
+    return o >= ord(periodStart) && o <= ord(periodEnd) + 1;
+  }
+
+  // ---------- 5. merge shifts into email lines ----------
+  // Rule: chain adjacent shifts (same client, next starts when prev ends).
+  // After absorbing an overnight-ending shift, absorb at most one short stub (<=3h), then close.
+  function absMin(s) { return ord(s.date) * MIN_DAY + s.startMin; }
+  function absEnd(s) { return ord(s.date) * MIN_DAY + s.endMin; }
+  function hasNight(startAbs, endAbs) { return splitHours(startAbs, endAbs).night > 0; }
+
+  function mergeLines(shifts, clientKeyFn) {
+    var byClient = {};
+    shifts.forEach(function (s) {
+      var k = clientKeyFn ? clientKeyFn(s) : (s.client + '|' + s.clientInitials);
+      (byClient[k] = byClient[k] || []).push(s);
+    });
+    var lines = [];
+    Object.keys(byClient).forEach(function (k) {
+      var arr = byClient[k].slice().sort(function (a, b) { return absMin(a) - absMin(b); });
+      var cur = null;
+      function push() { if (cur) { lines.push(cur); cur = null; } }
+      arr.forEach(function (s) {
+        var sA = absMin(s), sE = absEnd(s);
+        var absorbed = false;
+        if (cur && cur.state !== 'closed' && sA === cur.endAbs) {
+          if (cur.state === 'night-done') {
+            if (sE - sA <= 180) { absorb(cur, s); cur.state = 'closed'; absorbed = true; }
+          } else {
+            absorb(cur, s); absorbed = true;
+          }
+        }
+        if (!absorbed) { push(); cur = newLine(s, k); }
+        // if this shift passed through the overnight block and ended in the morning,
+        // the line may only absorb one short stub (<=3h) before closing
+        if (cur.state === 'open') {
+          var endDM = sE % MIN_DAY;
+          if (hasNight(sA, sE) && endDM >= DAY_START && endDM <= 12 * 60) cur.state = 'night-done';
+        }
+      });
+      push();
+    });
+    lines.sort(function (a, b) { return a.startAbs - b.startAbs; });
+    return lines;
+  }
+  function newLine(s, key) {
+    return { clientKey: key, shifts: [s], date: s.date, startAbs: absMin(s), endAbs: absEnd(s), state: 'open' };
+  }
+  function absorb(line, s) { line.shifts.push(s); line.endAbs = absEnd(s); }
+
+  // ---------- 6. hours & pay ----------
+  function splitHours(startAbs, endAbs) {
+    var day = 0, night = 0;
+    // count minute buckets in blocks for speed
+    var t = startAbs;
+    while (t < endAbs) {
+      var dm = t % MIN_DAY, next;
+      if (dm < DAY_START) { next = Math.min(endAbs, t + (DAY_START - dm)); night += next - t; }
+      else if (dm < NIGHT_START) { next = Math.min(endAbs, t + (NIGHT_START - dm)); day += next - t; }
+      else { next = Math.min(endAbs, t + (MIN_DAY - dm)); night += next - t; }
+      t = next;
+    }
+    return { day: day / 60, night: night / 60 };
+  }
+
+  // clientCfg: {label, mode:'daynight'|'flat', day, night, flat}
+  function linePay(line, cfg) {
+    var h = splitHours(line.startAbs, line.endAbs);
+    var hours = h.day + h.night;
+    if (!cfg) return { hours: hours, day: h.day, night: h.night, pay: null, dayPay: null, nightPay: null };
+    if (cfg.mode === 'flat') {
+      return { hours: hours, day: h.day, night: h.night, pay: r2(hours * cfg.flat), dayPay: r2(h.day * cfg.flat), nightPay: r2(h.night * cfg.flat) };
+    }
+    return { hours: hours, day: h.day, night: h.night, pay: r2(h.day * cfg.day + h.night * cfg.night), dayPay: r2(h.day * cfg.day), nightPay: r2(h.night * cfg.night) };
+  }
+  function r2(n) { return Math.round(n * 100) / 100; }
+
+  // ---------- 7. assignment rules ----------
+  // rules: {tueNight, weekdayNight, wedMixedDay} -> person names ('' = me); me = people[0]
+  function assignLine(line, rules, me) {
+    var startDayMin = line.startAbs % MIN_DAY;
+    var overnightLed = startDayMin >= NIGHT_START || startDayMin < DAY_START;
+    var wd = weekday(fromOrd(Math.floor(line.startAbs / MIN_DAY))); // 0=Sun..6=Sat
+    var h = splitHours(line.startAbs, line.endAbs);
+    if (overnightLed) {
+      if (wd === 2 && rules.tueNight) return { type: 'single', person: rules.tueNight };
+      if (wd >= 1 && wd <= 5 && rules.weekdayNight) return { type: 'single', person: rules.weekdayNight };
+      return { type: 'single', person: me };
+    }
+    if (h.night > 0 && wd === 3 && rules.wedMixedDay) {
+      return { type: 'split', day: rules.wedMixedDay, night: rules.weekdayNight || me };
+    }
+    return { type: 'single', person: me };
+  }
+
+  // ---------- 8. period computation ----------
+  // periodStart = a Monday ISO. Returns all derived dates.
+  function periodDates(periodStart) {
+    var s = ord(periodStart);
+    return {
+      start: periodStart,
+      end: fromOrd(s + 13),          // second Sunday
+      pullEnd: fromOrd(s + 14),      // the Monday after (captures last overnight + stub)
+      payday: fromOrd(s + 25),       // Friday, 12 days after period end
+      emailDue: fromOrd(s + 23)      // Wednesday before payday
+    };
+  }
+
+  // ---------- 9. formatting ----------
+  function fmtMD_YY(isoDate) {
+    return (+isoDate.slice(5, 7)) + '/' + (+isoDate.slice(8, 10)) + '/' + isoDate.slice(2, 4);
+  }
+  function fmtMD(isoDate) { return (+isoDate.slice(5, 7)) + '/' + (+isoDate.slice(8, 10)); }
+  function fmtTime(min) {
+    var dm = ((min % MIN_DAY) + MIN_DAY) % MIN_DAY;
+    var h = Math.floor(dm / 60), m = dm % 60;
+    var ap = h >= 12 ? 'PM' : 'AM';
+    var h12 = h % 12; if (h12 === 0) h12 = 12;
+    return h12 + (m ? ':' + pad(m) : '') + ap;
+  }
+  function fmtMoney(n) {
+    var neg = n < 0; n = Math.abs(n);
+    var s = (Math.round(n * 100) / 100).toFixed(2).replace(/\.00$/, '');
+    var parts = s.split('.');
+    parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    return (neg ? '-$' : '$') + parts.join('.');
+  }
+  function fmtHours(h) { return Math.round(h * 100) / 100; }
+
+  // lines enriched: [{date, startAbs, endAbs, clientLabel, hours, pay, assignee...}]
+  function buildEmail(o) {
+    // o: {payday, clients: [{label, hours, lines:[{date,startAbs,endAbs}]}], total, backPay:{amount, from}|null, finalPay, signature, greeting}
+    var out = [];
+    out.push(o.greeting || 'Hello,', '');
+    out.push('PAY DAY: ' + fmtMD_YY(o.payday), '');
+    o.clients.forEach(function (c) {
+      out.push(c.label + ' (' + fmtHours(c.hours) + ' HOURS)', '');
+      c.lines.forEach(function (l) {
+        out.push(fmtMD_YY(l.date) + ': ' + fmtTime(l.startAbs) + '-' + fmtTime(l.endAbs));
+      });
+      out.push('');
+    });
+    out.push('Total pay: ' + fmtMoney(o.total), '');
+    if (o.backPay && o.backPay.amount) {
+      out.push('BACK PAY (from ' + o.backPay.from + '): ' + fmtMoney(o.backPay.amount), '');
+    }
+    out.push('FINAL PAY: ' + fmtMoney(o.finalPay), '');
+    out.push('Thank you,', '', o.signature || '');
+    return out.join('\n');
+  }
+
+  function buildSms(o) {
+    // o: {start, end, payday, total, people: [{name, total, lines:[{date, hours, pay}]}]}
+    var out = [];
+    out.push('Pay period ' + fmtMD_YY(o.start) + '-' + fmtMD_YY(o.end) + ' (pay day ' + fmtMD_YY(o.payday) + ')');
+    out.push('Total: ' + fmtMoney(o.total));
+    out.push('');
+    o.people.forEach(function (p) {
+      out.push(p.name + ': ' + fmtMoney(p.total));
+      p.lines.forEach(function (l) {
+        out.push('  ' + fmtMD_YY(l.date) + ': ' + l.desc + ' = ' + fmtMoney(l.pay));
+      });
+      out.push('');
+    });
+    return out.join('\n').trim();
+  }
+
+  return {
+    buildFragments: buildFragments, findColumns: findColumns, parseDocument: parseDocument,
+    myShifts: myShifts, dedupe: dedupe, inPullWindow: inPullWindow,
+    mergeLines: mergeLines, splitHours: splitHours, linePay: linePay, assignLine: assignLine,
+    periodDates: periodDates, ord: ord, fromOrd: fromOrd, weekday: weekday, absMin: absMin, absEnd: absEnd,
+    fmtMD_YY: fmtMD_YY, fmtMD: fmtMD, fmtTime: fmtTime, fmtMoney: fmtMoney, fmtHours: fmtHours,
+    buildEmail: buildEmail, buildSms: buildSms
+  };
+});
+
+</script>
+<script>
+'use strict';
+/* ================= state ================= */
+var KEY='brittcoPayHelper.v1';
+var state=load();
+function load(){
+  try{var s=JSON.parse(localStorage.getItem(KEY));if(s&&s.settings){migrate(s.settings);return s;}}catch(e){}
+  return {settings:{myInitials:'',myName:'',greeting:'Hello,',anchorPayday:'',people:['Me','',''],clients:[],rules:{tueNight:2,weekdayNight:1,wedMixedDay:2}},periods:[]};
+}
+/* rules are stored as an INDEX into people (robust to renames/typos); migrate old name-based rules.
+   Default rules: Tue-night lines -> person 3, other weekday-night lines -> person 2, Wed day hours -> person 3. */
+function migrate(st){
+  st.people=st.people||['Me','',''];st.rules=st.rules||{};
+  if(st.anchorPayday===undefined)st.anchorPayday='';
+  ['tueNight','weekdayNight','wedMixedDay'].forEach(function(k){
+    var v=st.rules[k];
+    if(typeof v==='number')return;
+    if(!v){st.rules[k]=-1;return;}
+    var idx=-1;st.people.forEach(function(nm,i){if(nm&&String(nm).trim().toLowerCase()===String(v).trim().toLowerCase())idx=i;});
+    st.rules[k]=idx;});
+  // if no rule was ever set, apply the standard defaults (still editable in Settings)
+  if(st.rules.tueNight===-1&&st.rules.weekdayNight===-1&&st.rules.wedMixedDay===-1){
+    st.rules={tueNight:2,weekdayNight:1,wedMixedDay:2};}
+}
+function ruleName(k){var i=S().rules[k];return (typeof i==='number'&&i>=0&&S().people[i]&&S().people[i].trim())?S().people[i].trim():'';}
+function save(){localStorage.setItem(KEY,JSON.stringify(state));}
+function S(){return state.settings;}
+var view='home', openId=null;
+
+if(window.pdfjsLib){pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';}
+
+/* ================= helpers ================= */
+function h(tag,attrs,kids){var e=document.createElement(tag);attrs=attrs||{};
+  for(var k in attrs){if(k==='class')e.className=attrs[k];else if(k==='html')e.innerHTML=attrs[k];else if(k.slice(0,2)==='on')e.addEventListener(k.slice(2),attrs[k]);else if(k==='checked'||k==='disabled'||k==='selected')e[k]=attrs[k];else if(k==='value')e.value=attrs[k];else e.setAttribute(k,attrs[k]);}
+  (kids||[]).forEach(function(c){if(c==null)return;e.appendChild(typeof c==='string'?document.createTextNode(c):c);});return e;}
+function esc(t){var d=document.createElement('div');d.textContent=t==null?'':t;return d.innerHTML;}
+function uid(){return Math.random().toString(36).slice(2,10);}
+function cleanClientName(t){t=(t||'').trim();var half=t.slice(0,Math.ceil(t.length/2)).trim();
+  if(t.length>4&&t.replace(/\s+/g,'')===(half+half).replace(/\s+/g,''))return half;
+  var m=t.match(/^(.+?)\s+\1/);return m?m[1]:t;}
+function minutesFromTimeInput(v){if(!v)return null;var p=v.split(':');return (+p[0])*60+(+p[1]);}
+function timeInputVal(min){min=((min%1440)+1440)%1440;return String(Math.floor(min/60)).padStart(2,'0')+':'+String(min%60).padStart(2,'0');}
+function copyText(t,btn){function done(){var o=btn.textContent;btn.textContent='Copied ✓';setTimeout(function(){btn.textContent=o;},1500);}
+  if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).then(done,function(){fallback();});}else fallback();
+  function fallback(){var ta=document.createElement('textarea');ta.value=t;document.body.appendChild(ta);ta.select();try{document.execCommand('copy');done();}catch(e){alert('Copy failed — select the text manually.');}document.body.removeChild(ta);}}
+function peopleList(){return S().people.filter(function(p){return p&&p.trim();});}
+function me(){return S().people[0]||'Me';}
+function matchClient(shift){var cs=S().clients;for(var i=0;i<cs.length;i++){var c=cs[i];
+  if(shift.clientInitials&&c.initials&&c.initials===shift.clientInitials)return c;
+  if(shift.client&&c.match&&shift.client.replace(/\s+/g,'').toLowerCase().indexOf(c.match.replace(/\s+/g,'').toLowerCase())!==-1)return c;
+  if(shift.client&&c.label&&shift.client.replace(/\s+/g,'').toLowerCase().indexOf(c.label.replace(/\s+/g,'').toLowerCase())!==-1)return c;}
+  return null;}
+function clientKeyOf(s){var c=matchClient(s);return c?c.label:cleanClientName(s.client)||s.clientInitials||'Unknown client';}
+function cfgByKey(key){var cs=S().clients;for(var i=0;i<cs.length;i++)if(cs[i].label===key)return cs[i];return null;}
+
+/* ================= auto backup (writes into a folder you pick once — e.g. inside Google Drive) ================= */
+var dirHandle=null,backupStatus='';
+function fsSupported(){return typeof window.showDirectoryPicker==='function'&&typeof window.indexedDB!=='undefined';}
+function idb(){return new Promise(function(res,rej){var r=indexedDB.open('bph-fs',1);r.onupgradeneeded=function(){r.result.createObjectStore('kv');};r.onsuccess=function(){res(r.result);};r.onerror=function(){rej(r.error);};});}
+function idbSet(k,v){return idb().then(function(db){return new Promise(function(res,rej){var tx=db.transaction('kv','readwrite');tx.objectStore('kv').put(v,k);tx.oncomplete=res;tx.onerror=function(){rej(tx.error);};});});}
+function idbGet(k){return idb().then(function(db){return new Promise(function(res,rej){var tx=db.transaction('kv','readonly');var rq=tx.objectStore('kv').get(k);rq.onsuccess=function(){res(rq.result);};rq.onerror=function(){rej(rq.error);};});});}
+function loadDirHandle(){if(!fsSupported())return Promise.resolve(null);
+  return idbGet('backupDir').then(function(h){dirHandle=h||null;return dirHandle;}).catch(function(){return null;});}
+function chooseBackupFolder(){if(!fsSupported()){alert('This browser cannot save directly to a folder. Use Chrome or Edge for automatic backups — or use Export backup manually.');return;}
+  window.showDirectoryPicker({mode:'readwrite'}).then(function(h2){dirHandle=h2;idbSet('backupDir',h2).catch(function(){});backupStatus='Backup folder set: "'+h2.name+'"';render();}).catch(function(){});}
+function backupPayload(){return JSON.stringify({kind:'brittco-pay-helper-backup',version:1,exported:new Date().toISOString(),settings:S(),periods:state.periods},null,2);}
+function downloadBackup(){var blob=new Blob([backupPayload()],{type:'application/json'});
+  var a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  a.download='brittco-pay-backup-'+new Date().toISOString().slice(0,10)+'.json';a.click();}
+function autoBackup(){ // writes latest + dated backup into the chosen folder; falls back to a download
+  var data=backupPayload();
+  function fallback(){try{downloadBackup();return Promise.resolve('No backup folder set — backup downloaded instead.');}
+    catch(e){return Promise.resolve('Automatic backup unavailable ('+e.message+'). Use Export backup.');}}
+  if(!dirHandle)return fallback();
+  return dirHandle.queryPermission({mode:'readwrite'}).then(function(perm){
+    return perm==='granted'?perm:dirHandle.requestPermission({mode:'readwrite'});
+  }).then(function(perm){
+    if(perm!=='granted')return fallback();
+    var names=['brittco-backup-latest.json','brittco-backup-'+new Date().toISOString().slice(0,10)+'.json'];
+    var chain=Promise.resolve();
+    names.forEach(function(n){chain=chain.then(function(){return dirHandle.getFileHandle(n,{create:true});})
+      .then(function(fh){return fh.createWritable();})
+      .then(function(ws){return ws.write(data).then(function(){return ws.close();});});});
+    return chain.then(function(){return 'Backup saved to folder "'+(dirHandle.name||'backup')+'" ✓';});
+  }).catch(function(e){return 'Backup to folder failed ('+e.message+') — use Export backup.';});
+}
+function runAutoBackup(){autoBackup().then(function(msg){backupStatus=msg;render();});}
+
+/* ================= period computation ================= */
+function computePeriod(p){
+  var included=p.shifts.filter(function(s){return s.include&&BPH.inPullWindow(s,p.start,p.end);});
+  var lines=BPH.mergeLines(included,clientKeyOf).filter(function(l){
+    return BPH.ord(l.date)>=BPH.ord(p.start)&&BPH.ord(l.date)<=BPH.ord(p.end);});
+  var out={lines:[],perPerson:{},total:0,unknownRate:[],warnings:[]};
+  peopleList().forEach(function(n){out.perPerson[n]=0;});
+  var effRules={tueNight:ruleName('tueNight'),weekdayNight:ruleName('weekdayNight'),wedMixedDay:ruleName('wedMixedDay')};
+  lines.forEach(function(l){
+    var key=l.clientKey,cfg=cfgByKey(key);
+    var pay=BPH.linePay(l,cfg);
+    var auto=BPH.assignLine(l,effRules,me());
+    var ovKey=key+'|'+l.startAbs;
+    var ov=(p.assign||{})[ovKey];
+    var asg=ov||auto;
+    if(asg.type==='single'&&peopleList().indexOf(asg.person)===-1)asg={type:'single',person:me()};
+    var rec={line:l,key:key,cfg:cfg,pay:pay,asg:asg,ovKey:ovKey,auto:auto};
+    out.lines.push(rec);
+    if(pay.pay==null){if(out.unknownRate.indexOf(key)===-1)out.unknownRate.push(key);}
+    else{out.total+=pay.pay;
+      if(asg.type==='single'){out.perPerson[asg.person]=(out.perPerson[asg.person]||0)+pay.pay;}
+      else{out.perPerson[asg.day]=(out.perPerson[asg.day]||0)+pay.dayPay;out.perPerson[asg.night]=(out.perPerson[asg.night]||0)+pay.nightPay;}}
+    if(pay.hours>24){
+      var det='';
+      if(cfg&&pay.pay!=null)det=cfg.mode==='flat'
+        ?(' Math: '+BPH.fmtHours(pay.hours)+'h × $'+cfg.flat+' = '+BPH.fmtMoney(pay.pay)+'.')
+        :(' Math: '+BPH.fmtHours(pay.day)+' day-hrs × $'+cfg.day+' + '+BPH.fmtHours(pay.night)+' night-hrs × $'+cfg.night+' = '+BPH.fmtMoney(pay.pay)+'.');
+      out.warnings.push(BPH.fmtMD_YY(l.date)+': this line runs over 24h ('+BPH.fmtHours(pay.hours)+'h).'+det+' Double-check it.');}
+  });
+  p.shifts.forEach(function(s){if(s.include&&s.status!=='completed'&&s.status!=='manual')
+    out.warnings.push(BPH.fmtMD_YY(s.date)+' '+BPH.fmtTime(s.startMin)+'-'+BPH.fmtTime(s.endMin)+' is marked "'+s.status+'" in Brittco but is included.');});
+  out.total=Math.round(out.total*100)/100;
+  out.finalPay=out.total+((p.backPay&&+p.backPay.amount)||0);
+  return out;
+}
+function emailFor(p,comp){
+  var byClient={};
+  comp.lines.forEach(function(r){(byClient[r.key]=byClient[r.key]||[]).push(r);});
+  var clients=Object.keys(byClient).map(function(k){
+    var rows=byClient[k];
+    return {label:k,hours:rows.reduce(function(a,r){return a+r.pay.hours;},0),
+      lines:rows.map(function(r){return {date:r.line.date,startAbs:r.line.startAbs,endAbs:r.line.endAbs};})};});
+  return BPH.buildEmail({payday:p.payday,clients:clients,total:comp.total,
+    backPay:(p.backPay&&+p.backPay.amount)?{amount:+p.backPay.amount,from:p.backPay.from||'previous period'}:null,
+    finalPay:comp.finalPay,signature:S().myName,greeting:S().greeting});
+}
+function smsFor(p,comp){
+  return BPH.buildSms({start:p.start,end:p.end,payday:p.payday,total:comp.total,
+    people:peopleList().map(function(name){
+      var lines=[];
+      comp.lines.forEach(function(r){
+        if(r.pay.pay==null)return;
+        if(r.asg.type==='single'&&r.asg.person===name)lines.push({date:r.line.date,desc:BPH.fmtHours(r.pay.hours)+'h',pay:r.pay.pay});
+        else if(r.asg.type==='split'){
+          if(r.asg.day===name&&r.pay.day>0)lines.push({date:r.line.date,desc:BPH.fmtHours(r.pay.day)+'h day',pay:r.pay.dayPay});
+          if(r.asg.night===name&&r.pay.night>0)lines.push({date:r.line.date,desc:BPH.fmtHours(r.pay.night)+'h night',pay:r.pay.nightPay});}});
+      return {name:name,total:Math.round((comp.perPerson[name]||0)*100)/100,lines:lines};})});
+}
+function prevShortfall(p){
+  var best=null;
+  state.periods.forEach(function(q){
+    if(q.id===p.id)return;
+    if(BPH.ord(q.end)<BPH.ord(p.start)&&q.status==='paid'&&q.shortfall>0){
+      if(!best||BPH.ord(q.end)>BPH.ord(best.end))best=q;}});
+  return best;
+}
+
+/* ================= render ================= */
+function render(){
+  document.querySelectorAll('nav button').forEach(function(b){b.classList.toggle('on',b.dataset.v===view);});
+  var m=document.getElementById('main');m.innerHTML='';
+  if(view==='home')renderHome(m);
+  else if(view==='period')renderPeriod(m);
+  else if(view==='settings')renderSettings(m);
+  else if(view==='backup')renderBackup(m);
+}
+document.querySelectorAll('nav button').forEach(function(b){b.addEventListener('click',function(){view=b.dataset.v;openId=null;render();});});
+
+function setupNeeded(){return !S().myInitials||!S().clients.length;}
+
+/* ---------- home ---------- */
+function renderHome(m){
+  if(setupNeeded()){
+    m.appendChild(h('div',{class:'warnbox'},[
+      'First time here? Go to ',h('b',{},['Settings']),' to enter your initials, clients and rates — or use ',
+      h('b',{},['Backup / Restore']),' to import a settings file.']));
+  }
+  var bar=h('div',{class:'row',style:'margin-bottom:14px'},[
+    h('button',{class:'btn',onclick:newPeriod,disabled:setupNeeded()},['+ New pay period'])]);
+  m.appendChild(bar);
+  if(!state.periods.length){m.appendChild(h('div',{class:'card mut'},['No pay periods yet. Create one to get started.']));return;}
+  state.periods.slice().sort(function(a,b){return BPH.ord(b.start)-BPH.ord(a.start);}).forEach(function(p){
+    var comp=computePeriod(p);
+    var right=h('div',{style:'margin-left:auto;text-align:right'},[
+      h('div',{class:'tot'},[BPH.fmtMoney(comp.finalPay)]),
+      p.status==='paid'?h('div',{class:'mut'},['paid '+BPH.fmtMoney(p.actualPaid)+(p.shortfall>0?' · short '+BPH.fmtMoney(p.shortfall):p.shortfall<0?' · over '+BPH.fmtMoney(-p.shortfall):' · exact')]):h('div',{class:'mut'},['payday '+BPH.fmtMD_YY(p.payday)])]);
+    var card=h('div',{class:'pcard',onclick:function(){openId=p.id;view='period';render();}},[
+      h('div',{},[
+        h('div',{style:'font-weight:700'},[BPH.fmtMD_YY(p.start)+' – '+BPH.fmtMD_YY(p.end)]),
+        h('div',{class:'mut'},[p.shifts.filter(function(s){return s.include;}).length+' shifts · '+comp.lines.length+' lines'])]),
+      h('span',{class:'chip '+p.status},[p.status]),right,
+      h('button',{class:'btn sec',onclick:function(e){e.stopPropagation();if(confirm('Delete this pay period?')){state.periods=state.periods.filter(function(q){return q.id!==p.id;});save();render();}}},['Delete'])]);
+    m.appendChild(card);
+  });
+}
+function todayOrd(){var t=new Date();return Math.round(Date.UTC(t.getFullYear(),t.getMonth(),t.getDate())/86400000);}
+function offCadence(payday){ // true if payday doesn't fit the every-2-weeks schedule
+  var a=S().anchorPayday;if(!a||!payday)return false;
+  return (((BPH.ord(payday)-BPH.ord(a))%14)+14)%14!==0;}
+function newPeriod(){
+  var start;
+  var latest=state.periods.slice().sort(function(a,b){return BPH.ord(b.start)-BPH.ord(a.start);})[0];
+  if(latest)start=BPH.fromOrd(BPH.ord(latest.end)+1);
+  else if(S().anchorPayday){
+    // next payday on the anchored every-2-weeks schedule, then derive the period
+    var a=BPH.ord(S().anchorPayday),o=todayOrd();
+    var payday=a+Math.ceil((o-a)/14)*14;if(payday<o)payday+=14;
+    start=BPH.fromOrd(payday-25);}
+  else{var o2=todayOrd();
+    var wd=new Date(o2*86400000).getUTCDay();var back=(wd+6)%7;start=BPH.fromOrd(o2-back-14);}
+  var d=BPH.periodDates(start);
+  var p={id:uid(),start:d.start,end:d.end,payday:d.payday,emailDue:d.emailDue,shifts:[],assign:{},backPay:{amount:0,from:''},status:'draft',actualPaid:null,shortfall:0,files:[]};
+  var prev=prevShortfall(p);
+  if(prev){p.backPay={amount:prev.shortfall,from:BPH.fmtMD_YY(prev.start)+'-'+BPH.fmtMD_YY(prev.end)};}
+  state.periods.push(p);save();openId=p.id;view='period';render();
+}
+
+/* ---------- period editor ---------- */
+function getPeriod(){for(var i=0;i<state.periods.length;i++)if(state.periods[i].id===openId)return state.periods[i];return null;}
+function renderPeriod(m){
+  var p=getPeriod();if(!p){view='home';render();return;}
+  var comp=computePeriod(p);
+  m.appendChild(h('div',{class:'row',style:'margin-bottom:12px'},[
+    h('button',{class:'btn sec',onclick:function(){view='home';render();}},['← All periods']),
+    h('span',{class:'chip '+p.status},[p.status])]));
+
+  /* dates — pick PAY DAY first, everything derives from it */
+  var dates=h('div',{class:'card'},[h('h2',{},['1 · Pay period']),
+    h('div',{class:'mut',style:'margin-bottom:10px'},['Pick your pay day — the period start/end and email-due dates fill in automatically (you can still adjust them).'])]);
+  var dGrid=h('div',{class:'grid c4'},[
+    field('Pay day (Friday)',h('input',{type:'date',value:p.payday,onchange:function(e){if(!e.target.value)return;var o=BPH.ord(e.target.value);p.payday=e.target.value;p.end=BPH.fromOrd(o-12);p.start=BPH.fromOrd(o-25);p.emailDue=BPH.fromOrd(o-2);save();render();}})),
+    field('Period start (Mon) · auto',h('input',{type:'date',value:p.start,onchange:function(e){if(!e.target.value)return;var d=BPH.periodDates(e.target.value);p.start=d.start;p.end=d.end;p.payday=d.payday;p.emailDue=d.emailDue;save();render();}})),
+    field('Period end (Sun) · auto',h('input',{type:'date',value:p.end,onchange:function(e){p.end=e.target.value;save();render();}})),
+    field('Email due (Wed) · auto',h('input',{type:'date',value:p.emailDue,onchange:function(e){p.emailDue=e.target.value;save();render();}}))]);
+  dates.appendChild(dGrid);
+  if(p.payday&&BPH.weekday(p.payday)!==5)dates.appendChild(h('div',{class:'warnbox'},['Heads up: this pay day is not a Friday — double-check the date.']));
+  if(offCadence(p.payday)){
+    var a0=BPH.ord(S().anchorPayday),d0=BPH.ord(p.payday);
+    var lo=d0-((((d0-a0)%14)+14)%14),hi=lo+14;
+    dates.appendChild(h('div',{class:'warnbox'},['This pay day is off your usual every-2-weeks schedule. Nearest scheduled paydays: '+BPH.fmtMD_YY(BPH.fromOrd(lo))+' and '+BPH.fmtMD_YY(BPH.fromOrd(hi))+'.']));}
+  dates.appendChild(h('div',{class:'mut',style:'margin-top:8px'},[
+    'Pull Brittco Attendance weeks covering '+BPH.fmtMD_YY(p.start)+' through '+BPH.fmtMD_YY(BPH.fromOrd(BPH.ord(p.end)+1))+' (one extra day so the last overnight and its morning stub are included).']));
+  m.appendChild(dates);
+
+  /* upload */
+  var up=h('div',{class:'card'},[h('h2',{},['2 · Upload Brittco attendance PDFs'])]);
+  if(!window.pdfjsLib)up.appendChild(h('div',{class:'errbox'},['PDF library could not load (needs internet once). You can still add shifts manually below.']));
+  var drop=h('div',{class:'drop'},['Drop the weekly Attendance PDFs here, or click to choose (you can add several).']);
+  var fin=h('input',{type:'file',accept:'application/pdf',multiple:'multiple',style:'display:none',onchange:function(e){handleFiles(p,e.target.files);}});
+  drop.addEventListener('click',function(){fin.click();});
+  drop.addEventListener('dragover',function(e){e.preventDefault();drop.classList.add('over');});
+  drop.addEventListener('dragleave',function(){drop.classList.remove('over');});
+  drop.addEventListener('drop',function(e){e.preventDefault();drop.classList.remove('over');handleFiles(p,e.dataTransfer.files);});
+  up.appendChild(drop);up.appendChild(fin);
+  (p.files||[]).forEach(function(f){up.appendChild(h('div',{class:'mut',style:'margin-top:6px'},['✓ '+f.name+' — '+f.week+' · '+f.mine+' of your shifts ('+f.total+' total)']));});
+  m.appendChild(up);
+
+  /* shifts */
+  var sh=h('div',{class:'card'},[h('h2',{},['3 · Your shifts (review & adjust)'])]);
+  if(!p.shifts.length)sh.appendChild(h('div',{class:'mut'},['No shifts yet — upload PDFs or add manually.']));
+  else{
+    var tbl=h('table',{},[h('thead',{},[h('tr',{},['Use','Date','Client','Start','End','Status','Hours',''].map(function(t){return h('th',{},[t]);}))])]);
+    var tb=h('tbody');
+    p.shifts.slice().sort(function(a,b){return BPH.absMin(a)-BPH.absMin(b);}).forEach(function(s){
+      var hrs=BPH.splitHours(BPH.absMin(s),BPH.absEnd(s));
+      var inWin=BPH.inPullWindow(s,p.start,p.end);
+      var tr=h('tr',{class:(s.include&&inWin)?'':'excluded'},[
+        h('td',{},[inWin?h('input',{type:'checkbox',checked:!!s.include,onchange:function(e){s.include=e.target.checked;save();render();}}):h('span',{class:'chip draft',title:'This shift is outside the selected pay period, so it is not counted.'},['outside period'])]),
+        h('td',{},[h('input',{type:'date',value:s.date,onchange:function(e){s.date=e.target.value;save();render();}})]),
+        h('td',{},[clientKeyOf(s)]),
+        h('td',{},[h('input',{class:'time-in',type:'time',value:timeInputVal(s.startMin),onchange:function(e){var v=minutesFromTimeInput(e.target.value);if(v!=null){var dur=s.endMin-s.startMin;s.startMin=v;s.endMin=v+dur;save();render();}}})]),
+        h('td',{},[h('input',{class:'time-in',type:'time',value:timeInputVal(s.endMin),onchange:function(e){var v=minutesFromTimeInput(e.target.value);if(v!=null){s.endMin=v<=s.startMin?v+1440:v;save();render();}}}),s.endMin>1440?h('span',{class:'mut'},[' +1d']):null]),
+        h('td',{},[h('span',{class:'chip '+s.status},[s.status])]),
+        h('td',{},[String(BPH.fmtHours(hrs.day+hrs.night))]),
+        h('td',{},[h('button',{class:'btn sec',onclick:function(){if(confirm('Remove this shift?')){p.shifts=p.shifts.filter(function(q){return q!==s;});save();render();}}},['✕'])])]);
+      tb.appendChild(tr);});
+    tbl.appendChild(tb);sh.appendChild(tbl);
+  }
+  /* manual add */
+  var addC=h('select',{},S().clients.map(function(c){return h('option',{value:c.label},[c.label]);}));
+  var addD=h('input',{type:'date',value:p.start});
+  var addS=h('input',{class:'time-in',type:'time',value:'23:00'});
+  var addE=h('input',{class:'time-in',type:'time',value:'07:00'});
+  sh.appendChild(h('div',{class:'row',style:'margin-top:12px'},[
+    h('span',{class:'mut'},['Add manually:']),addD,addC,addS,h('span',{class:'mut'},['to']),addE,
+    h('button',{class:'btn sec',onclick:function(){
+      var st=minutesFromTimeInput(addS.value),en=minutesFromTimeInput(addE.value);
+      if(st==null||en==null||!addD.value)return;
+      var cfg=cfgByKey(addC.value)||{};
+      p.shifts.push({client:addC.value,clientInitials:cfg.initials||'',date:addD.value,startMin:st,endMin:en<=st?en+1440:en,staff:[S().myInitials],status:'manual',include:true,source:'manual'});
+      save();render();}},['Add shift'])]));
+  m.appendChild(sh);
+
+  /* review */
+  var rv=h('div',{class:'card'},[h('h2',{},['4 · Review — merged lines & pay'])]);
+  rv.appendChild(h('div',{class:'mut',style:'margin-bottom:8px'},[
+    'Auto-assign rules in effect: Tuesday-night lines → '+(ruleName('tueNight')||me())+
+    ' · other weekday-night lines → '+(ruleName('weekdayNight')||me())+
+    ' · Wednesday day hours → '+(ruleName('wedMixedDay')||me())+
+    ' · everything else → '+me()+'. Change any line below.']));
+  comp.unknownRate.forEach(function(k){rv.appendChild(h('div',{class:'errbox'},['No rate set for "'+k+'" — add this client in Settings, then come back.']));});
+  comp.warnings.forEach(function(w){rv.appendChild(h('div',{class:'warnbox'},[w]));});
+  if(!comp.lines.length)rv.appendChild(h('div',{class:'mut'},['Nothing to review yet.']));
+  else{
+    var tbl2=h('table',{},[h('thead',{},[h('tr',{},['Date','Client','Time','Day h','Night h','Pay','Assigned to'].map(function(t){return h('th',{},[t]);}))])]);
+    var tb2=h('tbody');
+    comp.lines.forEach(function(r){
+      var asgCell=h('td');
+      var sel=h('select',{onchange:function(e){
+        var v=e.target.value;
+        if(v==='__split')p.assign[r.ovKey]={type:'split',day:me(),night:me()};
+        else p.assign[r.ovKey]={type:'single',person:v};
+        save();render();}},
+        peopleList().map(function(n){return h('option',{value:n,selected:r.asg.type==='single'&&r.asg.person===n},[n]);})
+        .concat([h('option',{value:'__split',selected:r.asg.type==='split'},['Split day/night…'])]));
+      asgCell.appendChild(sel);
+      if(r.asg.type==='split'){
+        asgCell.appendChild(h('div',{class:'row',style:'margin-top:4px'},[
+          h('span',{class:'mut'},['day:']),
+          h('select',{onchange:function(e){p.assign[r.ovKey]={type:'split',day:e.target.value,night:r.asg.night};save();render();}},
+            peopleList().map(function(n){return h('option',{value:n,selected:r.asg.day===n},[n]);})),
+          h('span',{class:'mut'},['night:']),
+          h('select',{onchange:function(e){p.assign[r.ovKey]={type:'split',day:r.asg.day,night:e.target.value};save();render();}},
+            peopleList().map(function(n){return h('option',{value:n,selected:r.asg.night===n},[n]);}))]));}
+      tb2.appendChild(h('tr',{},[
+        h('td',{},[BPH.fmtMD_YY(r.line.date)]),
+        h('td',{},[r.key]),
+        h('td',{},[BPH.fmtTime(r.line.startAbs)+'-'+BPH.fmtTime(r.line.endAbs)+' ('+BPH.fmtHours(r.pay.hours)+'h)']),
+        h('td',{},[String(BPH.fmtHours(r.pay.day))]),
+        h('td',{},[String(BPH.fmtHours(r.pay.night))]),
+        h('td',{class:'money'},[r.pay.pay==null?'—':BPH.fmtMoney(r.pay.pay)]),
+        asgCell]));});
+    tbl2.appendChild(tb2);rv.appendChild(tbl2);
+  }
+  /* back pay + totals */
+  rv.appendChild(h('h3',{},['Back pay carried in']));
+  rv.appendChild(h('div',{class:'row'},[
+    h('span',{class:'mut'},['Amount $']),
+    h('input',{type:'number',step:'0.01',style:'width:110px',value:p.backPay.amount||0,onchange:function(e){p.backPay.amount=+e.target.value||0;save();render();}}),
+    h('span',{class:'mut'},['from (label):']),
+    h('input',{style:'width:200px',value:p.backPay.from||'',placeholder:'6/01/26-6/14/26',onchange:function(e){p.backPay.from=e.target.value;save();render();}})]));
+  var kvs=h('div',{class:'grid c4',style:'margin-top:14px'});
+  peopleList().forEach(function(n){kvs.appendChild(kv(n,BPH.fmtMoney(Math.round((comp.perPerson[n]||0)*100)/100)));});
+  rv.appendChild(kvs);
+  rv.appendChild(h('div',{class:'grid c2',style:'margin-top:10px'},[
+    kv('Total pay',BPH.fmtMoney(comp.total)),kv('FINAL PAY (with back pay)',BPH.fmtMoney(comp.finalPay))]));
+  m.appendChild(rv);
+
+  /* outputs */
+  var out=h('div',{class:'card'},[h('h2',{},['5 · Email & text message'])]);
+  var draft=(p.status==='draft');
+  // while drafting, outputs ALWAYS regenerate live from the review table; they freeze (and become editable) on confirm
+  var emailTxt=draft?emailFor(p,comp):(p.emailOverride!=null?p.emailOverride:emailFor(p,comp));
+  var smsTxt=draft?smsFor(p,comp):(p.smsOverride!=null?p.smsOverride:smsFor(p,comp));
+  var ta1=h('textarea',{class:'out'},[]);ta1.value=emailTxt;
+  var ta2=h('textarea',{class:'out',style:'min-height:190px'},[]);ta2.value=smsTxt;
+  if(draft){ta1.readOnly=true;ta2.readOnly=true;}
+  else{ta1.addEventListener('input',function(){p.emailOverride=ta1.value;save();});
+       ta2.addEventListener('input',function(){p.smsOverride=ta2.value;save();});}
+  var cp1=h('button',{class:'btn',onclick:function(){copyText(ta1.value,cp1);}},['Copy email']);
+  var cp2=h('button',{class:'btn',onclick:function(){copyText(ta2.value,cp2);}},['Copy text message']);
+  if(draft)out.appendChild(h('div',{class:'mut',style:'margin-bottom:8px'},['These update automatically as you change the review above. They become editable after "Confirm & save".']));
+  out.appendChild(h('h3',{},['Email (send to the office — never auto-sent)']));
+  out.appendChild(ta1);
+  out.appendChild(h('div',{class:'row',style:'margin:8px 0 16px'},[cp1].concat(draft?[]:[
+    h('button',{class:'btn sec',onclick:function(){p.emailOverride=null;save();render();}},['Regenerate'])])));
+  out.appendChild(h('h3',{},['Text message (split)']));
+  out.appendChild(ta2);
+  out.appendChild(h('div',{class:'row',style:'margin:8px 0'},[cp2].concat(draft?[]:[
+    h('button',{class:'btn sec',onclick:function(){p.smsOverride=null;save();render();}},['Regenerate'])])));
+  if(p.status==='draft'){
+    out.appendChild(h('div',{class:'row',style:'margin-top:14px'},[
+      h('button',{class:'btn',disabled:!comp.lines.length||comp.unknownRate.length>0,onclick:function(){p.status='confirmed';p.emailOverride=ta1.value;p.smsOverride=ta2.value;save();runAutoBackup();}},['Confirm & save'])]));}
+  if(backupStatus)out.appendChild(h('div',{class:backupStatus.indexOf('✓')!==-1?'okbox':'warnbox'},[backupStatus]));
+  m.appendChild(out);
+
+  /* payday */
+  if(p.status!=='draft'){
+    var pd=h('div',{class:'card'},[h('h2',{},['6 · Payday — record what you were paid'])]);
+    pd.appendChild(h('div',{class:'mut',style:'margin-bottom:8px'},['Expected FINAL PAY: '+BPH.fmtMoney(comp.finalPay)]));
+    var paidIn=h('input',{type:'number',step:'0.01',style:'width:140px',value:p.actualPaid!=null?p.actualPaid:''});
+    pd.appendChild(h('div',{class:'row'},[
+      h('span',{class:'mut'},['I was paid $']),paidIn,
+      h('button',{class:'btn',onclick:function(){
+        var v=+paidIn.value;if(isNaN(v)){alert('Enter the amount from your paycheck.');return;}
+        p.actualPaid=v;p.shortfall=Math.round((comp.finalPay-v)*100)/100;p.status='paid';save();runAutoBackup();}},['Save paycheck'])]));
+    if(p.status==='paid'){
+      if(p.shortfall>0)pd.appendChild(h('div',{class:'warnbox'},['Shortfall of '+BPH.fmtMoney(p.shortfall)+' — it will be suggested as BACK PAY on your next period.']));
+      else if(p.shortfall<0)pd.appendChild(h('div',{class:'okbox'},['Paid '+BPH.fmtMoney(-p.shortfall)+' more than expected.']));
+      else pd.appendChild(h('div',{class:'okbox'},['Paycheck matches exactly. ✓']));}
+    m.appendChild(pd);
+  }
+}
+function field(lab,input){return h('label',{class:'f'},[lab,input]);}
+function kv(k,v){return h('div',{class:'kv'},[h('div',{class:'k'},[k]),h('div',{class:'v'},[v])]);}
+
+/* ---------- pdf handling ---------- */
+function handleFiles(p,files){
+  if(!window.pdfjsLib){alert('PDF library not loaded — check internet and reload, or add shifts manually.');return;}
+  Array.prototype.forEach.call(files,function(file){
+    var reader=new FileReader();
+    reader.onload=function(){
+      pdfjsLib.getDocument({data:new Uint8Array(reader.result)}).promise.then(function(doc){
+        var pages=[],chain=Promise.resolve();
+        for(let i=1;i<=doc.numPages;i++){
+          chain=chain.then(function(){return doc.getPage(i);}).then(function(pg){return pg.getTextContent();}).then(function(tc){pages.push(tc.items);});}
+        return chain.then(function(){
+          var r=BPH.parseDocument(pages,{year:+p.start.slice(0,4),periodStart:p.start});
+          if(!r.columns){alert(file.name+': could not find the calendar header — is this a Brittco Attendance PDF?');return;}
+          var mine=BPH.myShifts(r.shifts,S().myInitials);
+          var added=0;
+          mine.forEach(function(s){
+            var dup=p.shifts.some(function(q){return q.date===s.date&&q.startMin===s.startMin&&q.endMin===s.endMin&&clientKeyOf(q)===clientKeyOf(s);});
+            if(dup)return;
+            s.include=(s.status==='completed');s.source='pdf';p.shifts.push(s);added++;});
+          p.files=p.files||[];
+          p.files.push({name:file.name,week:r.columns[0].md+'–'+r.columns[r.columns.length-1].md,mine:added,total:r.shifts.length});
+          save();render();});
+      }).catch(function(e){alert(file.name+': failed to parse — '+e.message);});
+    };
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+/* ---------- settings ---------- */
+function renderSettings(m){
+  var s=S();
+  var c1=h('div',{class:'card'},[h('h2',{},['You'])]);
+  c1.appendChild(h('div',{class:'grid c2'},[
+    field('Your initials in Brittco (e.g. FY)',h('input',{value:s.myInitials,onchange:function(e){s.myInitials=e.target.value.trim().toUpperCase();save();}})),
+    field('Your full name (email signature)',h('input',{value:s.myName,onchange:function(e){s.myName=e.target.value;save();}}))]));
+  m.appendChild(c1);
+
+  var c2=h('div',{class:'card'},[h('h2',{},['People (for the pay split)']),
+    h('div',{class:'mut',style:'margin-bottom:8px'},['First person is you. Leave others blank if unused.'])]);
+  var pg=h('div',{class:'grid c4'});
+  for(let i=0;i<3;i++){pg.appendChild(field(i===0?'You':'Person '+(i+1),h('input',{value:s.people[i]||'',onchange:function(e){s.people[i]=e.target.value.trim();save();render();}})));}
+  c2.appendChild(pg);m.appendChild(c2);
+
+  var c3=h('div',{class:'card'},[h('h2',{},['Clients & rates'])]);
+  var tbl=h('table',{},[h('thead',{},[h('tr',{},['Display name','Matches PDF name','Initials','Rate type','Day $','Night $','Flat $',''].map(function(t){return h('th',{},[t]);}))])]);
+  var tb=h('tbody');
+  s.clients.forEach(function(c){
+    tb.appendChild(h('tr',{},[
+      h('td',{},[h('input',{style:'width:110px',value:c.label,onchange:function(e){c.label=e.target.value;save();}})]),
+      h('td',{},[h('input',{style:'width:140px',value:c.match||'',onchange:function(e){c.match=e.target.value;save();}})]),
+      h('td',{},[h('input',{style:'width:56px',value:c.initials||'',onchange:function(e){c.initials=e.target.value.trim().toUpperCase();save();}})]),
+      h('td',{},[h('select',{onchange:function(e){c.mode=e.target.value;save();render();}},[
+        h('option',{value:'daynight',selected:c.mode==='daynight'},['day / night']),
+        h('option',{value:'flat',selected:c.mode==='flat'},['flat hourly'])])]),
+      h('td',{},[h('input',{type:'number',step:'0.01',style:'width:70px',value:c.day||'',disabled:c.mode==='flat',onchange:function(e){c.day=+e.target.value;save();}})]),
+      h('td',{},[h('input',{type:'number',step:'0.01',style:'width:70px',value:c.night||'',disabled:c.mode==='flat',onchange:function(e){c.night=+e.target.value;save();}})]),
+      h('td',{},[h('input',{type:'number',step:'0.01',style:'width:70px',value:c.flat||'',disabled:c.mode!=='flat',onchange:function(e){c.flat=+e.target.value;save();}})]),
+      h('td',{},[h('button',{class:'btn sec',onclick:function(){if(confirm('Remove client?')){s.clients=s.clients.filter(function(q){return q!==c;});save();render();}}},['✕'])])]));});
+  tbl.appendChild(tb);c3.appendChild(tbl);
+  c3.appendChild(h('div',{style:'margin-top:10px'},[h('button',{class:'btn sec',onclick:function(){s.clients.push({id:uid(),label:'',match:'',initials:'',mode:'daynight',day:18,night:16,flat:20});save();render();}},['+ Add client'])]));
+  c3.appendChild(h('div',{class:'mut',style:'margin-top:8px'},['Night rate applies 11PM–7AM. "Matches PDF name" is the client name as it appears in the Brittco PDF (e.g. "Gear, Richard").']));
+  m.appendChild(c3);
+
+  var c4=h('div',{class:'card'},[h('h2',{},['Auto-assignment rules (defaults — you can change each line during review)']),
+    h('div',{class:'mut',style:'margin-bottom:8px'},['Preset to your split: Tuesday nights + Wednesday day hours → Person 3, other weekday overnights → Person 2, everything else → you. Edit below anytime.'])]);
+  function ruleSel(key,lab){
+    return field(lab,h('select',{onchange:function(e){s.rules[key]=+e.target.value;save();render();}},
+      [h('option',{value:'-1',selected:!(s.rules[key]>=0)},['— me —'])].concat(
+        s.people.map(function(n,i){return n&&n.trim()?h('option',{value:String(i),selected:s.rules[key]===i},[n]):null;}).filter(Boolean))));}
+  c4.appendChild(h('div',{class:'grid c2'},[
+    ruleSel('tueNight','Overnight lines starting Tuesday go to'),
+    ruleSel('weekdayNight','Other weekday overnight lines go to'),
+    ruleSel('wedMixedDay','Wednesday day+night lines: day hours go to'),
+    field('Email greeting',h('input',{value:s.greeting||'Hello,',onchange:function(e){s.greeting=e.target.value;save();}})),
+    field('A known pay day (anchors the every-2-weeks schedule)',h('input',{type:'date',value:s.anchorPayday||'',onchange:function(e){s.anchorPayday=e.target.value;save();}}))]));
+  m.appendChild(c4);
+
+  var c5=h('div',{class:'card'},[h('h2',{},['Danger zone'])]);
+  c5.appendChild(h('button',{class:'btn danger',onclick:function(){if(confirm('Erase ALL data (settings + history) from this browser? Export a backup first!')){localStorage.removeItem(KEY);state=load();render();}}},['Erase all data']));
+  m.appendChild(c5);
+}
+
+/* ---------- backup ---------- */
+function renderBackup(m){
+  var c=h('div',{class:'card'},[h('h2',{},['Backup / Restore']),
+    h('p',{class:'mut'},['Your data lives only in this browser. Back up after each pay period (backups contain real names — don’t share them publicly).'])]);
+  /* automatic backups */
+  c.appendChild(h('h3',{},['Automatic backup folder']));
+  if(fsSupported()){
+    c.appendChild(h('div',{class:'mut',style:'margin-bottom:8px'},['Pick a folder once (choose one inside Google Drive to sync it to your phone/tablet). Every "Confirm & save" and "Save paycheck" then writes brittco-backup-latest.json plus a dated copy there automatically.']));
+    c.appendChild(h('div',{class:'row',style:'margin-bottom:10px'},[
+      h('button',{class:'btn',onclick:chooseBackupFolder},[dirHandle?('Change folder (current: '+dirHandle.name+')'):'Choose backup folder…']),
+      h('button',{class:'btn sec',onclick:runAutoBackup},['Back up now'])]));
+  }else{
+    c.appendChild(h('div',{class:'warnbox'},['Automatic folder backups need Chrome or Edge. In this browser, a backup file is downloaded automatically on each Confirm & save instead — move it to Google Drive yourself, or set your downloads folder to a Google Drive folder.']));
+    c.appendChild(h('div',{class:'row',style:'margin-bottom:10px'},[h('button',{class:'btn sec',onclick:runAutoBackup},['Back up now'])]));
+  }
+  if(backupStatus)c.appendChild(h('div',{class:backupStatus.indexOf('✓')!==-1?'okbox':'warnbox'},[backupStatus]));
+  c.appendChild(h('h3',{},['Manual export / import']));
+  c.appendChild(h('div',{class:'row'},[
+    h('button',{class:'btn',onclick:downloadBackup},['Export backup (.json)']),
+    (function(){var fi=h('input',{type:'file',accept:'.json,application/json',style:'display:none',onchange:function(e){
+      var f=e.target.files[0];if(!f)return;var r=new FileReader();
+      r.onload=function(){try{var d=JSON.parse(r.result);
+        if(!d.settings){alert('Not a valid backup/settings file.');return;}
+        if(!confirm('Import this file? It replaces your settings'+(d.periods&&d.periods.length?' and history ('+d.periods.length+' periods)':'')+'.'))return;
+        state.settings=d.settings;migrate(state.settings);if(d.periods)state.periods=d.periods;save();alert('Imported ✓');view='home';render();
+      }catch(err){alert('Could not read file: '+err.message);}};
+      r.readAsText(f);}});
+      var b=h('button',{class:'btn sec',onclick:function(){fi.click();}},['Import backup / settings…']);
+      var w=h('span');w.appendChild(fi);w.appendChild(b);return w;})()]));
+  m.appendChild(c);
+}
+
+render();
+loadDirHandle().then(function(){if(dirHandle)render();}).catch(function(){});
+</script>
+</body>
+</html>
