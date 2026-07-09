@@ -515,7 +515,12 @@ function migrate(st){
     st.rules={tueNight:2,weekdayNight:1,wedMixedDay:2};}
 }
 function ruleName(k){var i=S().rules[k];return (typeof i==='number'&&i>=0&&S().people[i]&&S().people[i].trim())?S().people[i].trim():'';}
-function save(){localStorage.setItem(KEY,JSON.stringify(state));}
+var saveBackupTimer=null;
+function save(){localStorage.setItem(KEY,JSON.stringify(state));
+  // if a backup folder is set, quietly refresh the backup a few seconds after ANY change
+  if(typeof dirHandle!=='undefined'&&dirHandle){
+    clearTimeout(saveBackupTimer);
+    saveBackupTimer=setTimeout(function(){autoBackup().then(function(msg){backupStatus=msg;});},4000);}}
 function S(){return state.settings;}
 var view='home', openId=null;
 
