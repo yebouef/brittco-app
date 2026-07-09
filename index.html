@@ -459,15 +459,20 @@ footer{color:var(--mut);text-align:center;font-size:12px;padding:20px}
   }
 
   function buildSms(o) {
-    // o: {start, end, payday, total, people: [{name, total, lines:[{date, hours, pay}]}]}
+    // o: {start, end, payday, total, backPayTotal?, people: [{name, total, lines:[{date, desc, pay}], backPay?: [{amount, from}]}]}
     var out = [];
     out.push('Pay period ' + fmtMD_YY(o.start) + '-' + fmtMD_YY(o.end) + ' (pay day ' + fmtMD_YY(o.payday) + ')');
-    out.push('Total: ' + fmtMoney(o.total));
+    var grand = o.total + (o.backPayTotal || 0);
+    out.push('Total: ' + fmtMoney(o.total) + (o.backPayTotal ? ' + ' + fmtMoney(o.backPayTotal) + ' back pay = ' + fmtMoney(grand) : ''));
     out.push('');
     o.people.forEach(function (p) {
-      out.push(p.name + ': ' + fmtMoney(p.total));
+      var bp = (p.backPay || []).reduce(function (a, b) { return a + (+b.amount || 0); }, 0);
+      out.push(p.name + ': ' + (bp ? fmtMoney(p.total) + ' + ' + fmtMoney(bp) + ' back pay = ' + fmtMoney(p.total + bp) : fmtMoney(p.total)));
       p.lines.forEach(function (l) {
         out.push('  ' + fmtMD_YY(l.date) + ': ' + l.desc + ' = ' + fmtMoney(l.pay));
+      });
+      (p.backPay || []).forEach(function (b) {
+        if (+b.amount) out.push('  Back pay' + (b.from ? ' (from ' + b.from + ')' : '') + ' = ' + fmtMoney(+b.amount));
       });
       out.push('');
     });
@@ -574,6 +579,13 @@ function autoBackup(){ // writes latest + dated backup into the chosen folder; f
 function runAutoBackup(){autoBackup().then(function(msg){backupStatus=msg;render();});}
 
 /* ================= period computation ================= */
+/* back pay: list of {amount, from, person} — person '' means me. Migrates the old single {amount, from}. */
+function backPayItems(p){
+  if(!p.backPayItems){
+    p.backPayItems=(p.backPay&&+p.backPay.amount)?[{amount:+p.backPay.amount,from:p.backPay.from||'',person:''}]:[];
+  }
+  return p.backPayItems;
+}
 function computePeriod(p){
   var included=p.shifts.filter(function(s){return s.include&&BPH.inPullWindow(s,p.start,p.end);});
   var lines=BPH.mergeLines(included,clientKeyOf).filter(function(l){
@@ -605,7 +617,9 @@ function computePeriod(p){
   p.shifts.forEach(function(s){if(s.include&&s.status!=='completed'&&s.status!=='manual')
     out.warnings.push(BPH.fmtMD_YY(s.date)+' '+BPH.fmtTime(s.startMin)+'-'+BPH.fmtTime(s.endMin)+' is marked "'+s.status+'" in Brittco but is included.');});
   out.total=Math.round(out.total*100)/100;
-  out.finalPay=out.total+((p.backPay&&+p.backPay.amount)||0);
+  out.backPay=backPayItems(p);
+  out.backPayTotal=Math.round(out.backPay.reduce(function(a,b){return a+(+b.amount||0);},0)*100)/100;
+  out.finalPay=Math.round((out.total+out.backPayTotal)*100)/100;
   return out;
 }
 function emailFor(p,comp){
@@ -615,12 +629,13 @@ function emailFor(p,comp){
     var rows=byClient[k];
     return {label:k,hours:rows.reduce(function(a,r){return a+r.pay.hours;},0),
       lines:rows.map(function(r){return {date:r.line.date,startAbs:r.line.startAbs,endAbs:r.line.endAbs};})};});
+  var bpFrom=comp.backPay.map(function(b){return b.from;}).filter(function(v,i,a){return v&&a.indexOf(v)===i;}).join(', ')||'previous period';
   return BPH.buildEmail({payday:p.payday,clients:clients,total:comp.total,
-    backPay:(p.backPay&&+p.backPay.amount)?{amount:+p.backPay.amount,from:p.backPay.from||'previous period'}:null,
+    backPay:comp.backPayTotal?{amount:comp.backPayTotal,from:bpFrom}:null,
     finalPay:comp.finalPay,signature:S().myName,greeting:S().greeting});
 }
 function smsFor(p,comp){
-  return BPH.buildSms({start:p.start,end:p.end,payday:p.payday,total:comp.total,
+  return BPH.buildSms({start:p.start,end:p.end,payday:p.payday,total:comp.total,backPayTotal:comp.backPayTotal,
     people:peopleList().map(function(name){
       var lines=[];
       comp.lines.forEach(function(r){
@@ -629,7 +644,8 @@ function smsFor(p,comp){
         else if(r.asg.type==='split'){
           if(r.asg.day===name&&r.pay.day>0)lines.push({date:r.line.date,desc:BPH.fmtHours(r.pay.day)+'h day',pay:r.pay.dayPay});
           if(r.asg.night===name&&r.pay.night>0)lines.push({date:r.line.date,desc:BPH.fmtHours(r.pay.night)+'h night',pay:r.pay.nightPay});}});
-      return {name:name,total:Math.round((comp.perPerson[name]||0)*100)/100,lines:lines};})});
+      var bp=comp.backPay.filter(function(b){return (b.person||me())===name&&+b.amount;});
+      return {name:name,total:Math.round((comp.perPerson[name]||0)*100)/100,lines:lines,backPay:bp};})});
 }
 function prevShortfall(p){
   var best=null;
@@ -694,9 +710,9 @@ function newPeriod(){
   else{var o2=todayOrd();
     var wd=new Date(o2*86400000).getUTCDay();var back=(wd+6)%7;start=BPH.fromOrd(o2-back-14);}
   var d=BPH.periodDates(start);
-  var p={id:uid(),start:d.start,end:d.end,payday:d.payday,emailDue:d.emailDue,shifts:[],assign:{},backPay:{amount:0,from:''},status:'draft',actualPaid:null,shortfall:0,files:[]};
+  var p={id:uid(),start:d.start,end:d.end,payday:d.payday,emailDue:d.emailDue,shifts:[],assign:{},backPayItems:[],status:'draft',actualPaid:null,shortfall:0,files:[]};
   var prev=prevShortfall(p);
-  if(prev){p.backPay={amount:prev.shortfall,from:BPH.fmtMD_YY(prev.start)+'-'+BPH.fmtMD_YY(prev.end)};}
+  if(prev){p.backPayItems=[{amount:prev.shortfall,from:BPH.fmtMD_YY(prev.start)+'-'+BPH.fmtMD_YY(prev.end),person:me()}];}
   state.periods.push(p);save();openId=p.id;view='period';render();
 }
 
@@ -819,11 +835,20 @@ function renderPeriod(m){
   }
   /* back pay + totals */
   rv.appendChild(h('h3',{},['Back pay carried in']));
-  rv.appendChild(h('div',{class:'row'},[
-    h('span',{class:'mut'},['Amount $']),
-    h('input',{type:'number',step:'0.01',style:'width:110px',value:p.backPay.amount||0,onchange:function(e){p.backPay.amount=+e.target.value||0;save();render();}}),
-    h('span',{class:'mut'},['from (label):']),
-    h('input',{style:'width:200px',value:p.backPay.from||'',placeholder:'6/01/26-6/14/26',onchange:function(e){p.backPay.from=e.target.value;save();render();}})]));
+  var bpItems=backPayItems(p);
+  if(!bpItems.length)rv.appendChild(h('div',{class:'mut'},['No back pay this period.']));
+  bpItems.forEach(function(b){
+    rv.appendChild(h('div',{class:'row',style:'margin-bottom:6px'},[
+      h('span',{class:'mut'},['$']),
+      h('input',{type:'number',step:'0.01',style:'width:110px',value:b.amount||0,onchange:function(e){b.amount=+e.target.value||0;save();render();}}),
+      h('span',{class:'mut'},['from:']),
+      h('input',{style:'width:180px',value:b.from||'',placeholder:'6/01/26-6/14/26',onchange:function(e){b.from=e.target.value;save();render();}}),
+      h('span',{class:'mut'},['belongs to:']),
+      h('select',{onchange:function(e){b.person=e.target.value;save();render();}},
+        peopleList().map(function(n){return h('option',{value:n,selected:(b.person||me())===n},[n]);})),
+      h('button',{class:'btn sec',onclick:function(){p.backPayItems=bpItems.filter(function(q){return q!==b;});save();render();}},['✕'])]));});
+  rv.appendChild(h('div',{style:'margin-top:4px'},[
+    h('button',{class:'btn sec',onclick:function(){backPayItems(p).push({amount:0,from:'',person:me()});save();render();}},['+ Add back pay'])]));
   var kvs=h('div',{class:'grid c4',style:'margin-top:14px'});
   peopleList().forEach(function(n){kvs.appendChild(kv(n,BPH.fmtMoney(Math.round((comp.perPerson[n]||0)*100)/100)));});
   rv.appendChild(kvs);
