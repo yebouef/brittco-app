@@ -335,7 +335,8 @@ footer{color:var(--mut);text-align:center;font-size:12px;padding:20px}
         if (cur && cur.state !== 'closed' && sA === cur.endAbs) {
           if (cur.state === 'night-done') {
             if (sE - sA <= 180) { absorb(cur, s); cur.state = 'closed'; absorbed = true; }
-          } else if (sE - cur.startAbs <= 26 * 60) { // a single pay line can never exceed 26h
+          } else if (sE - cur.startAbs <= 26 * 60 && // a single pay line can never exceed 26h
+                     splitHours(cur.startAbs, sE).night <= 8) { // ...or contain more than one overnight block
             absorb(cur, s); absorbed = true;
           }
         }
@@ -593,9 +594,15 @@ function backPayItems(p){
 }
 function computePeriod(p){
   var included=p.shifts.filter(function(s){return s.include&&BPH.inPullWindow(s,p.start,p.end);});
+  // silently drop EXACT duplicates (same client, same start & end) — they come from overlapping PDFs
+  var seenKeys={},dedupWarn=[];
+  included=included.filter(function(s){
+    var k=clientKeyOf(s)+'|'+BPH.absMin(s)+'|'+BPH.absEnd(s);
+    if(seenKeys[k]){dedupWarn.push('Removed an exact duplicate shift: '+BPH.fmtMD_YY(s.date)+' '+BPH.fmtTime(s.startMin)+'-'+BPH.fmtTime(s.endMin)+' ('+clientKeyOf(s)+') — it appeared in more than one uploaded PDF.');return false;}
+    seenKeys[k]=1;return true;});
   var lines=BPH.mergeLines(included,clientKeyOf).filter(function(l){
     return BPH.ord(l.date)>=BPH.ord(p.start)&&BPH.ord(l.date)<=BPH.ord(p.end);});
-  var out={lines:[],perPerson:{},total:0,unknownRate:[],warnings:[]};
+  var out={lines:[],perPerson:{},total:0,unknownRate:[],warnings:dedupWarn.slice()};
   // a short morning stub on the first day that continues a shift from BEFORE the period
   // was already paid in the previous period's last line — exclude it
   lines=lines.filter(function(l){
@@ -893,6 +900,8 @@ function renderPeriod(m){
   var cp1=h('button',{class:'btn',onclick:function(){copyText(ta1.value,cp1);}},['Copy email']);
   var cp2=h('button',{class:'btn',onclick:function(){copyText(ta2.value,cp2);}},['Copy text message']);
   if(draft)out.appendChild(h('div',{class:'mut',style:'margin-bottom:8px'},['These update automatically as you change the review above. They become editable after "Confirm & save".']));
+  if(!draft&&((p.emailOverride!=null&&p.emailOverride!==emailFor(p,comp))||(p.smsOverride!=null&&p.smsOverride!==smsFor(p,comp))))
+    out.appendChild(h('div',{class:'warnbox'},['The saved email/text below no longer matches the current calculation (data or app rules changed since you confirmed). Click "Regenerate" to rebuild them from the numbers above.']));
   out.appendChild(h('h3',{},['Email (send to the office — never auto-sent)']));
   out.appendChild(ta1);
   out.appendChild(h('div',{class:'row',style:'margin:8px 0 16px'},[cp1].concat(draft?[]:[
