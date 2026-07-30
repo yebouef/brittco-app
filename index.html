@@ -335,7 +335,7 @@ footer{color:var(--mut);text-align:center;font-size:12px;padding:20px}
         if (cur && cur.state !== 'closed' && sA === cur.endAbs) {
           if (cur.state === 'night-done') {
             if (sE - sA <= 180) { absorb(cur, s); cur.state = 'closed'; absorbed = true; }
-          } else {
+          } else if (sE - cur.startAbs <= 26 * 60) { // a single pay line can never exceed 26h
             absorb(cur, s); absorbed = true;
           }
         }
@@ -596,6 +596,22 @@ function computePeriod(p){
   var lines=BPH.mergeLines(included,clientKeyOf).filter(function(l){
     return BPH.ord(l.date)>=BPH.ord(p.start)&&BPH.ord(l.date)<=BPH.ord(p.end);});
   var out={lines:[],perPerson:{},total:0,unknownRate:[],warnings:[]};
+  // a short morning stub on the first day that continues a shift from BEFORE the period
+  // was already paid in the previous period's last line — exclude it
+  lines=lines.filter(function(l){
+    if(l.endAbs-l.startAbs<=180){
+      var prevAdj=p.shifts.some(function(s){return BPH.ord(s.date)<BPH.ord(p.start)&&BPH.absEnd(s)===l.startAbs;});
+      if(prevAdj){out.warnings.push(BPH.fmtMD_YY(l.date)+' '+BPH.fmtTime(l.startAbs)+'-'+BPH.fmtTime(l.endAbs)+' was the tail of the previous period’s last overnight — excluded here (already paid last period).');return false;}
+    }
+    return true;});
+  // overlapping shifts for the same client = almost always duplicates from overlapping PDFs
+  var incSorted=included.slice().sort(function(a,b){return BPH.absMin(a)-BPH.absMin(b);});
+  for(var oi=0;oi<incSorted.length;oi++){
+    for(var oj=oi+1;oj<incSorted.length;oj++){
+      var A=incSorted[oi],B=incSorted[oj];
+      if(clientKeyOf(A)!==clientKeyOf(B))continue;
+      if(BPH.absMin(B)>=BPH.absEnd(A))break;
+      out.warnings.push('DUPLICATE? '+BPH.fmtMD_YY(A.date)+' '+BPH.fmtTime(A.startMin)+'-'+BPH.fmtTime(A.endMin)+' overlaps '+BPH.fmtMD_YY(B.date)+' '+BPH.fmtTime(B.startMin)+'-'+BPH.fmtTime(B.endMin)+' ('+clientKeyOf(A)+'). Uncheck one in the shifts list — hours are being counted twice.');}}
   peopleList().forEach(function(n){out.perPerson[n]=0;});
   var effRules={tueNight:ruleName('tueNight'),weekdayNight:ruleName('weekdayNight'),wedMixedDay:ruleName('wedMixedDay')};
   lines.forEach(function(l){
