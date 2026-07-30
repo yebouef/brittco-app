@@ -600,6 +600,8 @@ function computePeriod(p){
   var effRules={tueNight:ruleName('tueNight'),weekdayNight:ruleName('weekdayNight'),wedMixedDay:ruleName('wedMixedDay')};
   lines.forEach(function(l){
     var key=l.clientKey,cfg=cfgByKey(key);
+    // a 0 or blank rate is NOT a valid rate — treat as missing so it gets flagged, never paid $0
+    if(cfg&&!(cfg.mode==='flat'?+cfg.flat>0:(+cfg.day>0&&+cfg.night>0)))cfg=null;
     var pay=BPH.linePay(l,cfg);
     var auto=BPH.assignLine(l,effRules,me());
     var ovKey=key+'|'+l.startAbs;
