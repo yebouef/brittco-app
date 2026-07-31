@@ -74,7 +74,7 @@ footer{color:var(--mut);text-align:center;font-size:12px;padding:20px}
   </nav>
 </header>
 <main id="main"></main>
-<footer>Brittco Pay Helper <b>v8</b> · Local &amp; offline — your data lives only in this browser. Back up regularly.</footer>
+<footer>Brittco Pay Helper <b>v9</b> · Local &amp; offline — your data lives only in this browser. Back up regularly.</footer>
 
 <script>
 /* Brittco Pay Helper — core logic (parser, merger, pay engine, formatters)
@@ -262,7 +262,9 @@ footer{color:var(--mut);text-align:center;font-size:12px;padding:20px}
       var md = col.md.split('/');
       var date = mkDate(year, parseInt(md[0], 10), parseInt(md[1], 10), opts.periodStart);
       var start = c.times[0], end = c.times[1];
-      if (c.cross || end <= start) end += MIN_DAY;
+      // crossing midnight is true iff end <= start; the "Crosses Midnight" label is display-only
+      // (it can get attached to the wrong card in the PDF text stream and must never add 24h to a valid same-day range)
+      if (end <= start) end += MIN_DAY;
       shifts.push({
         client: c.client || '', clientInitials: c.clientInitials || '',
         date: date, startMin: start, endMin: end,
@@ -594,6 +596,13 @@ function backPayItems(p){
   return p.backPayItems;
 }
 function computePeriod(p){
+  // heal impossible stored shifts (>24h): older versions could mis-apply a stray "Crosses Midnight" flag
+  var healed=[];
+  p.shifts.forEach(function(s){
+    if(s.endMin-s.startMin>1440){
+      var fixed=s.endMin-1440;
+      if(fixed>s.startMin){s.endMin=fixed;healed.push('Auto-corrected an impossible shift over 24h: '+BPH.fmtMD_YY(s.date)+' now reads '+BPH.fmtTime(s.startMin)+'-'+BPH.fmtTime(s.endMin)+'.');}}});
+  if(healed.length)save();
   var included=p.shifts.filter(function(s){return s.include&&BPH.inPullWindow(s,p.start,p.end);});
   // silently drop EXACT duplicates (same client, same start & end) — they come from overlapping PDFs
   var seenKeys={},dedupWarn=[];
@@ -603,7 +612,7 @@ function computePeriod(p){
     seenKeys[k]=1;return true;});
   var lines=BPH.mergeLines(included,clientKeyOf).filter(function(l){
     return BPH.ord(l.date)>=BPH.ord(p.start)&&BPH.ord(l.date)<=BPH.ord(p.end);});
-  var out={lines:[],perPerson:{},total:0,unknownRate:[],warnings:dedupWarn.slice()};
+  var out={lines:[],perPerson:{},total:0,unknownRate:[],warnings:healed.concat(dedupWarn)};
   // a short morning stub on the first day that continues a shift from BEFORE the period
   // was already paid in the previous period's last line — exclude it
   lines=lines.filter(function(l){
