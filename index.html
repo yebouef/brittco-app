@@ -74,7 +74,7 @@ footer{color:var(--mut);text-align:center;font-size:12px;padding:20px}
   </nav>
 </header>
 <main id="main"></main>
-<footer>Brittco Pay Helper <b>v9</b> · Local &amp; offline — your data lives only in this browser. Back up regularly.</footer>
+<footer>Brittco Pay Helper <b>v10</b> · Local &amp; offline — your data lives only in this browser. Back up regularly.</footer>
 
 <script>
 /* Brittco Pay Helper — core logic (parser, merger, pay engine, formatters)
@@ -164,8 +164,15 @@ footer{color:var(--mut);text-align:center;font-size:12px;padding:20px}
       if (openCard.times.length < 2) incomplete.push(openCard);
       openCard = null;
     }
+    // page breaks can slice a card's "N Clients" header onto the previous page;
+    // when card content appears with no open card, reconstruct the card from the fragments
+    var curPage = 0;
+    function openSynthetic(f) {
+      openCard = { client: currentClient, x: f.x, topY: f.y, page: curPage, clientInitials: null, staff: [], times: [], cross: false, mode: 'client', status: null, synthetic: true };
+    }
 
     for (var p = 0; p < pages.length; p++) {
+      curPage = p;
       var bf = buildFragments(pages[p]);
       var frags = bf.frags;
       bf.glyphs.forEach(function (g) { g.page = p; allGlyphs.push(g); });
@@ -177,6 +184,9 @@ footer{color:var(--mut);text-align:center;font-size:12px;padding:20px}
         var st = stripped(t);
 
         if (/^Scheduled/i.test(st)) legendYs.push({ page: p, y: f.y });
+
+        // a card never spans day columns: fragment from another column means the open card is finished
+        if (openCard && columns && f.h < 14 && !sameCol(columns, openCard.x, f.x)) closeCard();
 
         // client section header (large font)
         if (f.h >= 14 && !/^Attendance/i.test(st)) {
@@ -191,7 +201,7 @@ footer{color:var(--mut);text-align:center;font-size:12px;padding:20px}
           openCard = { client: currentClient, x: f.x, topY: f.y, page: p, clientInitials: null, staff: [], times: [], cross: false, mode: 'client', status: null };
           continue;
         }
-        if (/^\d+Staff$/i.test(st)) { if (openCard) openCard.mode = 'staff'; continue; }
+        if (/^\d+Staff$/i.test(st)) { if (!openCard) openSynthetic(f); openCard.mode = 'staff'; continue; }
 
         // times (may appear as "7:00am-" / "11:00pm" on separate fragments)
         var tm, times = [], re = /(\d{1,2}):(\d{2})\s*(am|pm)/gi;
@@ -209,10 +219,9 @@ footer{color:var(--mut);text-align:center;font-size:12px;padding:20px}
               if (incomplete[k].times.length < 2 && (!columns || sameCol(columns, incomplete[k].x, f.x))) { target = incomplete[k]; break; }
             }
           }
-          if (target) {
-            for (var q = 0; q < times.length && target.times.length < 2; q++) target.times.push(times[q]);
-            lastTimeCard = target;
-          }
+          if (!target) { openSynthetic(f); target = openCard; }
+          for (var q = 0; q < times.length && target.times.length < 2; q++) target.times.push(times[q]);
+          lastTimeCard = target;
           continue;
         }
 
@@ -224,9 +233,10 @@ footer{color:var(--mut);text-align:center;font-size:12px;padding:20px}
         if (/^Midnight$/i.test(st)) continue;
 
         // small font = initials line
-        if (f.h > 0 && f.h < 9 && openCard) {
+        if (f.h > 0 && f.h < 9) {
           var toks = t.split(/\s+/).filter(function (s) { return /^[A-Z]{1,3}$/.test(s); });
           if (!toks.length) continue;
+          if (!openCard) openSynthetic(f);
           if (openCard.mode === 'staff') openCard.staff = openCard.staff.concat(toks);
           else if (!openCard.clientInitials) openCard.clientInitials = toks[0];
           continue;
