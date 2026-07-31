@@ -332,7 +332,8 @@ footer{color:var(--mut);text-align:center;font-size:12px;padding:20px}
       arr.forEach(function (s) {
         var sA = absMin(s), sE = absEnd(s);
         var absorbed = false;
-        if (cur && cur.state !== 'closed' && sA === cur.endAbs) {
+        // shifts chain when back-to-back; allow up to 15 min of clock jitter (Brittco logs 9:01, 3:01 etc.)
+        if (cur && cur.state !== 'closed' && Math.abs(sA - cur.endAbs) <= 15 && sE > cur.endAbs) {
           if (cur.state === 'night-done') {
             if (sE - sA <= 180) { absorb(cur, s); cur.state = 'closed'; absorbed = true; }
           } else if (sE - cur.startAbs <= 26 * 60 && // a single pay line can never exceed 26h
@@ -356,7 +357,7 @@ footer{color:var(--mut);text-align:center;font-size:12px;padding:20px}
   function newLine(s, key) {
     return { clientKey: key, shifts: [s], date: s.date, startAbs: absMin(s), endAbs: absEnd(s), state: 'open' };
   }
-  function absorb(line, s) { line.shifts.push(s); line.endAbs = absEnd(s); }
+  function absorb(line, s) { line.shifts.push(s); line.endAbs = Math.max(line.endAbs, absEnd(s)); }
 
   // ---------- 6. hours & pay ----------
   function splitHours(startAbs, endAbs) {
@@ -607,7 +608,7 @@ function computePeriod(p){
   // was already paid in the previous period's last line — exclude it
   lines=lines.filter(function(l){
     if(l.endAbs-l.startAbs<=180){
-      var prevAdj=p.shifts.some(function(s){return BPH.ord(s.date)<BPH.ord(p.start)&&BPH.absEnd(s)===l.startAbs;});
+      var prevAdj=p.shifts.some(function(s){return BPH.ord(s.date)<BPH.ord(p.start)&&Math.abs(BPH.absEnd(s)-l.startAbs)<=15;});
       if(prevAdj){out.warnings.push(BPH.fmtMD_YY(l.date)+' '+BPH.fmtTime(l.startAbs)+'-'+BPH.fmtTime(l.endAbs)+' was the tail of the previous period’s last overnight — excluded here (already paid last period).');return false;}
     }
     return true;});

@@ -1,5 +1,5 @@
 /* Brittco Pay Helper service worker: offline support for the hosted (GitHub Pages) version */
-const CACHE = 'bph-v2';
+const CACHE = 'bph-v3';
 const ASSETS = [
   './', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png',
   'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js',
